@@ -5,11 +5,24 @@ Homework reflection 1
 
 1. In Coding Quiz 1, you are asked to find the distance of the farthest match in a set.  Is this farthest match distance too far to be a meaningful match?  How can you decide this?
 
+In Coding Quiz 1, the farthest match distance calculated in Q4 is approximately 0.2102. Whether this distance is too far to be a meaningful match depends on the scale and distribution of the Z variable in homework_1.2.csv, where Z follows a uniform distribution between roughly 0 and 1 (min ≈ 0.0047, max ≈ 0.9884, range ≈ 0.9837).
+
+This makes 0.2102 about 21% of the total range, which is a moderate level—not extreme but potentially introducing some bias in causal estimates, as it represents a noticeable difference relative to the data's spread (mean ≈ 0.473, std ≈ 0.290, with 0.2102 being 0.72 times the std). In this dataset's small size (100 rows), it's somewhat unavoidable due to limited matching options. Since domain knowledge is unavailable, assuming Z is a proportion or probability (common for 0-1 scaled variables), a 21% gap might be too far, as it could represent substantively different groups; however, if Z were a less sensitive metric like a normalized score, it might be acceptable.
+
+To decide this, perform data analysis like comparing to the std or computing the standardized mean difference (SMD ≈ 0.178 post-matching, which is acceptable as it's between 0.1 and 0.2, indicating reasonable balance); or conduct sensitivity tests with varying radii (e.g., restrict to 0.1 for tighter matches) to check if the effect (Q5: 0.5434) changes significantly, revealing noise introduction.
+
 2. In Coding Quiz 1, there are two approaches to matching: 
 (A) Picking the best match X = 0 corresponding to each X = 1 using Z values.
 (B) Using radius_neighbors to pick all matches X = 0 within a distance of 0.2 of each X = 1.
 
 Invent your own type of matching similar to 1 and 2 (or look one up on the internet), which has a different way to pick the matches in X = 0.  Clearly explain the approach you invented or found.
+
+Based on the two matching approaches in Coding Quiz 1—(A) selecting the single best match (1-NN) for each X=1 using Z values, yielding an effect of 0.5434 in Q5, and (B) selecting all matches within a 0.2 radius, resulting in 685 duplicates in Q6 and an effect of 0.5844 in Q7—I propose "optimal pair matching" as a similar but distinct method, found in causal inference literature.
+
+This approach pairs each treated unit (X=1) with a control (X=0) by minimizing the total sum of distances across all pairs, using an optimization algorithm (e.g., via the optmatch package in R or similar in Python). It differs from (A) by ensuring global optimality rather than greedy nearest-neighbor selection, which can reduce overall imbalance, and from (B) by enforcing 1:1 pairing without duplicates or fixed radii, though it allows for discarding unmatched units if needed.
+
+To implement: compute pairwise Z distances, then use a solver to find the assignment minimizing the sum (e.g., Hungarian algorithm for bipartite matching). This is more robust for small datasets like this one, potentially improving balance over the Q5/Q7 effect variability (0.5434 vs. 0.5844), but it increases computational cost and requires tuning for calipers to avoid poor matches. In Python, it can be approximated with scipy's linear_sum_assignment on a distance matrix.
+
 
 Homework reflection 2
 
