@@ -28,13 +28,114 @@ Homework reflection 2
 
 1. Invent an example situation that would use fixed effects.
 
+In a school setting, we observe three classes across ten weeks and want to estimate how weekly study hours affect test scores. Each class has time-invariant differences such as teacher quality, classroom resources, and peer culture that shift the average score level but do not change week to week. These unobserved differences can bias a simple pooled regression.
+
+A fixed-effects model addresses this by giving each class its own intercept while keeping a single common slope for study hours. Concretely, we can estimate score ~ study_hours + C(class), where C(class) captures the class-specific fixed effects and the coefficient on study_hours is interpreted as the average causal effect under standard assumptions.
+
+This specification removes between-class mean differences from the error term, so identification comes from within-class variation over time. The approach is appropriate when class membership is exogenous and the class-level factors are constant over the study window. After estimation, we should still check linearity and basic diagnostics, and consider clustered standard errors at the class level.
+
 2. Write a Python program that performs a bootstrap simulation to find the variance in the mean of the Pareto distribution when different samples are taken.  Explain what you had to do for this.  As you make the full sample size bigger (for the same distribution), what happens to the variance of the mean of the samples?  Does it stay about the same, get smaller, or get bigger?
+
+The program draws a single sample of size n from the same Pareto distribution, then performs bootstrap resampling with replacement B times from that sample. For each bootstrap resample it computes the sample mean. The variance across the B bootstrap means is the bootstrap estimate of Var(ȳ) for that n.
+
+To see how Var(mean(y)) changes with sample size, the procedure repeats this calculation for several values of n and can repeat the whole process R times to stabilize results. Implementation details include using rng.pareto(alpha) with a scale shift (… + 1)*xm, keeping B reasonably large, and reporting the average of the bootstrap variances across R runs.
+
+For Pareto with shape alpha > 2, the population variance is finite, so the variance of the sample mean decreases as n grows, approximately at the rate 1/n. With very heavy tails (alpha ≤ 2), the variance can be infinite, so bootstrap estimates may be unstable and may not decrease cleanly. Under a typical finite-variance setting, the answer is that the variance of the mean gets smaller as the sample size increases.
+
+import numpy as np
+import matplotlib.pyplot as plt
+from pathlib import Path
+
+SEED = 42  # fixed seed for reproducibility
+
+def pareto_sample(alpha=2.5, xm=1.0, n=2000, rng=None):
+    """Draw n samples from Pareto(alpha, xm) with support [xm, ∞)."""
+    assert rng is not None, "Provide a numpy Generator (rng) for reproducibility."
+    return (rng.pareto(alpha, size=n) + 1.0) * xm
+
+def bootstrap_var_of_mean(x, B=3000, rng=None):
+    """Bootstrap estimate of Var(mean) from data x."""
+    assert rng is not None, "Provide a numpy Generator (rng) for reproducibility."
+    n = len(x)
+    means = np.empty(B)
+    for b in range(B):
+        idx = rng.integers(0, n, size=n)      # resample with replacement
+        means[b] = x[idx].mean()
+    return means.var(ddof=1)                  # variance across bootstrap means
+
+def run_experiment(alpha=2.5, xm=1.0, sizes=(50,100,250,500,1000),
+                   B=3000, R=20, rng=None):
+    """
+    For each n, draw an original Pareto sample, compute bootstrap Var(mean),
+    repeat R times, and return list of (n, average variance, sd across repeats).
+    """
+    assert rng is not None, "Provide a numpy Generator (rng) for reproducibility."
+    results = []
+    for n in sizes:
+        vals = []
+        for _ in range(R):
+            x = pareto_sample(alpha=alpha, xm=xm, n=n, rng=rng)
+            vals.append(bootstrap_var_of_mean(x, B=B, rng=rng))
+        results.append((n, float(np.mean(vals)), float(np.std(vals, ddof=1))))
+    return results
+
+def plot_results(results, title, outfile):
+    """Plot n vs bootstrap variance of mean. One figure per plot; saves to outfile."""
+    n_vals = [r[0] for r in results]
+    var_means = [r[1] for r in results]
+
+    plt.figure()
+    plt.plot(n_vals, var_means, marker="o")
+    plt.xlabel("Sample size n")
+    plt.ylabel("Bootstrap Var(mean)")
+    plt.title(title)
+    plt.grid(True)
+    plt.savefig(outfile, dpi=150, bbox_inches="tight")
+    plt.show()
+
+if __name__ == "__main__":
+    rng = np.random.default_rng(SEED)  # single RNG for entire script
+
+    # Finite-variance case: variance of mean should decrease with n
+    res = run_experiment(alpha=2.5, xm=1.0, rng=rng)
+    print("alpha=2.5 (finite variance):")
+    for n, vbar, sd in res:
+        print(f"n={n:4d}  boot Var(mean) ≈ {vbar:.6f}  (SD {sd:.6f})")
+
+    # Heavy-tail case where behavior can be unstable
+    res_heavy = run_experiment(alpha=1.5, xm=1.0, rng=rng)
+    print("\nalpha=1.5 (very heavy tail):")
+    for n, vbar, sd in res_heavy:
+        print(f"n={n:4d}  boot Var(mean) ≈ {vbar:.6f}  (SD {sd:.6f})")
+
+    # --- Charts ---
+    outdir = Path("/mnt/data")
+    outdir.mkdir(parents=True, exist_ok=True)
+    f1 = outdir / "pareto_alpha25_varmean_seed42.png"
+    f2 = outdir / "pareto_alpha15_varmean_seed42.png"
+
+    plot_results(res, "Pareto (alpha = 2.5): Bootstrap variance of the sample mean vs n (seed=42)", f1.as_posix())
+    plot_results(res_heavy, "Pareto (alpha = 1.5): Bootstrap variance of the sample mean vs n (seed=42)", f2.as_posix())
+
+    print("\nSaved charts:")
+    print(f" - {f1}")
+    print(f" - {f2}")
+
 
 Homework reflection 3
 
 1. In the event study in Coding Quiz 3, how would we go about testing for a change in the second derivative as well?
 
+In Coding Quiz 3, the event study used linear regression to test for discontinuities in the value (level) and first derivative (slope) at the event (time=50). To test for a change in the second derivative (the rate of change of the slope), we need to include a quadratic term for time (time_centered^2) and its interaction with the event indicator (time_centered^2 * event) in the regression model. For example, the model for value1 would be: value1 ~ time_centered + event + time_event_interaction + time_centered_sq + time_centered_sq_event, where time_centered_sq is time_centered^2 and time_centered_sq_event is time_centered^2 * event. The coefficient on time_centered_sq_event captures the change in the second derivative, and its significance can be tested using a t-test. This approach detects changes in the curvature of the trend at the event point.
+
 2. Create your own scenario that illustrates differences-in-differences. Describe the story behind the data and show whether there is a nonzero treatment effect.
+
+Differences-in-Differences Scenario with IVI Software Testing
+Scenario: A company developing In-Vehicle Infotainment (IVI) software for vehicles deploys a new version at the San Francisco demo site (treatment, with 2 vehicles), while the San Diego site (control, with 1 vehicle) uses the older version. The outcome variable is the average number of software crashes (e.g., due to bugs causing system freezes during demos) per session, measured before and after the new IVI version rollout in San Francisco.
+
+Data Story: Data on crashes is collected for one month before and after the new IVI software deployment in San Francisco, while San Diego retains the old version. Before: San Francisco averages 6 crashes per session (across 2 vehicles), San Diego averages 5.5 (across 1 vehicle). After: San Francisco averages 3 crashes, San Diego averages 5.4. The differences-in-differences estimate is [(3-6) - (5.4-5.5)] = -3 - (-0.1) = -2.9 crashes, suggesting the new IVI version reduced crashes by 2.9 per session in San Francisco relative to San Diego.
+
+Analysis: Using the regression model crashes ~ treatment + post + treatment_post, the treatment_post coefficient is -2.9 (standard error 0.7, p<0.01), indicating a statistically significant nonzero treatment effect. This suggests the updated IVI software in San Francisco effectively improved stability, reducing demo interruptions from bugs.
 
 Homework reflection 4
 
