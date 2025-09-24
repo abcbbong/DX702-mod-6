@@ -141,4 +141,96 @@ Homework reflection 4
 
 1. The Coding Quiz gives two options for instrumental variables.  For the second item (dividing the range of W into multiple ranges), explain how you did it, show your code, and discuss any issues you encountered.
 
+To calculate the instrumental variable effect stratified by the confounder W, I first divided the continuous W variable into 10 discrete bins of equal size using the pandas.cut function. This approach allows for controlling the influence of W by isolating the causal relationship within smaller, more homogeneous subgroups. For each of these 10 bins, I calculated the Wald estimator by finding the ratio of the difference in the mean outcome Y to the difference in the mean treatment X between the instrument Z=1 and Z=0. Finally, I computed the overall effect by taking the average of the 10 individual estimators calculated from each bin.
+
+The primary issue I encountered with this method is the potential for instability in bins with small sample sizes. If a specific range of W contains very few data points, particularly an imbalance between Z=1 and Z=0 cases, the resulting Wald estimator for that bin can become highly volatile or even result in a NaN value. This could potentially skew the overall average effect. The choice of the number of bins is also a critical parameter; using too many bins increases the risk of this small sample size problem, while using too few may not adequately control for the confounding effect of W.
+
+Here is the Python code used to perform this calculation:
+
+import pandas as pd
+import numpy as np
+
+# Load the dataset for Question 1
+df1 = pd.read_csv('homework_4.1.csv', index_col=0)
+
+# Define a function to calculate the Wald estimator
+def wald_estimator(df):
+    # Separate data based on the instrument Z
+    df_z1 = df[df['Z'] == 1]
+    df_z0 = df[df['Z'] == 0]
+
+    # Ensure there are samples for both Z=1 and Z=0 to avoid division by zero
+    if len(df_z1) == 0 or len(df_z0) == 0:
+        return np.nan # Return Not a Number if a group is empty
+
+    # Calculate the differences in means for Y and X
+    diff_y = df_z1['Y'].mean() - df_z0['Y'].mean()
+    diff_x = df_z1['X'].mean() - df_z0['X'].mean()
+
+    # Avoid division by zero if the instrument has no effect on the treatment
+    if diff_x == 0:
+        return np.nan
+
+    return diff_y / diff_x
+
+# Create 10 bins for the confounder W
+df1['w_bins'] = pd.cut(df1['W'], bins=10)
+
+# Group by the W bins and apply the Wald estimator function to each group
+binned_effects = df1.groupby('w_bins').apply(wald_estimator)
+
+# Calculate the final effect by averaging the effects from each bin, ignoring any NaN results
+final_effect = binned_effects.mean()
+
+print("Causal effects calculated for each bin of W:")
+print(binned_effects)
+print(f"\nFinal Average Causal Effect: {final_effect:.4f}")
+
 2. Plot the college outcome (Y) vs. the test score (X) in a small range of test scores around 80. On the plot, compare it with the Y probability predicted by logistic regression. The ground truth Y value is 0 or 1; don't just plot 0 or 1 - that will make it unreadable.  Find some way to make it look better than that.
+
+To visualize the college outcome Y against the test score X around the cutoff of 80, I used a binned scatter plot to avoid an unreadable graph of just 0s and 1s. I first filtered the data to a narrow range of scores from 75 to 85. Then, I grouped the scores into small bins and calculated the mean of Y within each bin, which represents the empirical probability of college admission for that score range. This creates a clear visual trend of the raw data. On the same plot, I overlaid the predicted admission probability from a logistic regression model trained on this subset of data. This allows for a direct comparison between the empirical data trend and the model's idealized, smooth prediction.
+
+The resulting plot effectively contrasts the empirical data with the model's prediction. The blue dots (binned averages) clearly show a "jump" or discontinuity at the x=80 cutoff, representing the sharp increase in admission probability. The red dashed line shows the logistic model's single, continuous S-shaped curve, which by its nature cannot capture this sudden jump. This visualization powerfully illustrates the treatment effect at the cutoff, highlighting a key feature of the data that a standard continuous model like logistic regression would miss, thereby demonstrating the value of the RDD approach.
+
+Here is the Python code used to generate the plot:
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.linear_model import LogisticRegression
+
+# Load the dataset
+df_a = pd.read_csv('homework_4.2.a.csv', index_col=0)
+
+# Filter data to a small range around the cutoff of 80
+cutoff = 80
+plot_range = 5
+df_subset = df_a[(df_a['X'] >= cutoff - plot_range) & (df_a['X'] <= cutoff + plot_range)].copy()
+
+# Create bins for the X variable to make the scatter plot readable
+bins = np.linspace(df_subset['X'].min(), df_subset['X'].max(), 20)
+df_subset['x_bins'] = pd.cut(df_subset['X'], bins=bins)
+binned_plot_data = df_subset.groupby('x_bins').agg({'X': 'mean', 'Y': 'mean'}).dropna()
+
+# Fit a logistic regression model
+X = df_subset[['X']]
+y = df_subset['Y']
+model = LogisticRegression()
+model.fit(X, y)
+
+# Create a smooth range of X values for plotting the prediction
+x_fit = np.linspace(df_subset['X'].min(), df_subset['X'].max(), 300).reshape(-1, 1)
+y_fit_prob = model.predict_proba(x_fit)[:, 1]
+
+# Plotting the results
+plt.figure(figsize=(10, 6))
+sns.scatterplot(x='X', y='Y', data=binned_plot_data, color='blue', s=100, label='Actual Data (Binned Average)')
+plt.plot(x_fit, y_fit_prob, color='red', linestyle='--', label='Logistic Regression Prediction')
+plt.axvline(x=cutoff, color='black', linestyle='-.', label=f'Cutoff = {cutoff}')
+plt.title('College Admission Probability vs. Test Score (Around Cutoff)')
+plt.xlabel('Test Score (X)')
+plt.ylabel('Probability of College Admission (Y)')
+plt.legend()
+plt.grid(True, which='both', linestyle='--', linewidth=0.5)
+plt.savefig('logistic_vs_actual_plot.png')
