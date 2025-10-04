@@ -11,7 +11,17 @@ A negative feedback loop means that one thing increases another while the second
 
 Remember that we are using directed acyclic graphs where two things cannot directly cause each other.
 
+Negative Feedback Loop Diagram:
+
+High Body Temperature → Sweating → Body Temperature (Decrease). 
+
+This represents a DAG where high temperature causes sweating, and sweating causes a decrease in temperature, forming a negative feedback without direct cycles.
+
 2. Describe an example of a positive feedback loop.  This means that one things increases another while the second things also increases the first.
+
+Positive Feedback Loop Example: 
+
+In childbirth, oxytocin increases uterine contractions, and uterine contractions increase oxytocin release, amplifying the process until delivery.
 
 3. Draw a diagram for the following situation:
 
@@ -23,7 +33,36 @@ Write a dataset that simulates this situation.  (Show the code.) Include noise /
 
 Identify a backdoor path with one or more confounders for the relationship between deer and flowers.
 
+Diagram: Lightning Storms → Deer (decrease), Lightning Storms → Bears (decrease), Lightning Storms → Flowers (increase); Bears → Deer (decrease); Deer → Flowers (decrease).
+
+Simulation Dataset Code:
+
+import numpy as np
+import pandas as pd
+
+num = 100
+lightning = np.random.binomial(1, 0.5, num)  # Random lightning occurrence
+bears = np.maximum(50 - 20 * lightning + np.random.normal(0, 5, num), 0)  # Bears decrease + noise
+deer = np.maximum(100 - 10 * lightning - 0.5 * bears + np.random.normal(0, 10, num), 0)  # Deer decrease + noise
+flowers = np.maximum(200 + 15 * lightning - 0.3 * deer + np.random.normal(0, 20, num), 0)  # Flowers increase/decrease + noise
+
+df = pd.DataFrame({'lightning': lightning, 'bears': bears, 'deer': deer, 'flowers': flowers})
+print(df.head())
+
+Backdoor Path: 
+
+Deer ← Lightning → Flowers (Lightning as confounder, distorting the deer-flowers causal relationship).
+
 4. Draw a diagram for a situation of your own invention.  The diagram should include at least four nodes, one confounder, and one collider.  Be sure that it is acyclic (no loops).  Which node would say is most like a treatment (X)?  Which is most like an outcome (Y)?
+
+Invented Situation Diagram: 
+
+Smoking → Lung Cancer; Smoking → Yellow Teeth; Diet → Yellow Teeth (Yellow Teeth as collider); Diet → Obesity. 
+
+Acyclic DAG with Diet as confounder (e.g., for Yellow Teeth-Obesity) and Yellow Teeth as collider. 
+
+Treatment (X): Smoking (intervenable). Outcome (Y): Lung Cancer (key effect).
+
 
 Homework Reflection 6
 

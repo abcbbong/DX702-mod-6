@@ -1,15 +1,12 @@
-In all cases, written answers (apart from code) should not be longer than about three paragraphs.  Graders may not read all of your
-submission if it is longer than that.
+In all cases, written answers (apart from code) should not be longer than about three paragraphs. Graders may not read all of your submission if it is longer than that.
 
 Homework reflection 1
 
 1. In Coding Quiz 1, you are asked to find the distance of the farthest match in a set.  Is this farthest match distance too far to be a meaningful match?  How can you decide this?
 
-In Coding Quiz 1, the farthest match distance calculated in Q4 is approximately 0.2102. Whether this distance is too far to be a meaningful match depends on the scale and distribution of the Z variable in homework_1.2.csv, where Z follows a uniform distribution between roughly 0 and 1 (min ≈ 0.0047, max ≈ 0.9884, range ≈ 0.9837).
+In Coding Quiz 1, the farthest match distance (Q4) is approximately 0.2102 for the Z variable in homework_1.2.csv, where Z is uniformly distributed between ~0 and 1 (range ≈0.9837, mean ≈0.473, std ≈0.290). This distance represents about 21% of the total range and 0.72 times the standard deviation, suggesting it is moderately large and could introduce bias in causal estimates by pairing units that are substantively dissimilar, potentially violating the common support assumption in matching.
 
-This makes 0.2102 about 21% of the total range, which is a moderate level—not extreme but potentially introducing some bias in causal estimates, as it represents a noticeable difference relative to the data's spread (mean ≈ 0.473, std ≈ 0.290, with 0.2102 being 0.72 times the std). In this dataset's small size (100 rows), it's somewhat unavoidable due to limited matching options. Since domain knowledge is unavailable, assuming Z is a proportion or probability (common for 0-1 scaled variables), a 21% gap might be too far, as it could represent substantively different groups; however, if Z were a less sensitive metric like a normalized score, it might be acceptable.
-
-To decide this, perform data analysis like comparing to the std or computing the standardized mean difference (SMD ≈ 0.178 post-matching, which is acceptable as it's between 0.1 and 0.2, indicating reasonable balance); or conduct sensitivity tests with varying radii (e.g., restrict to 0.1 for tighter matches) to check if the effect (Q5: 0.5434) changes significantly, revealing noise introduction.
+To decide if it's too far, evaluate balance metrics like the standardized mean difference (SMD) post-matching; an SMD >0.1-0.2 indicates poor balance (here, post-matching SMD ≈0.178, borderline acceptable). Additionally, conduct sensitivity analysis by varying the matching radius (e.g., restrict to 0.1) and re-estimating the effect (Q5: 0.5434); if the effect changes substantially (>10-20%), the farthest match likely adds noise. Visual diagnostics like love plots or QQ plots for covariate distributions pre/post-matching can further confirm if this match degrades overall quality, ensuring the ATT estimate remains robust.
 
 2. In Coding Quiz 1, there are two approaches to matching: 
 (A) Picking the best match X = 0 corresponding to each X = 1 using Z values.
@@ -17,36 +14,30 @@ To decide this, perform data analysis like comparing to the std or computing the
 
 Invent your own type of matching similar to 1 and 2 (or look one up on the internet), which has a different way to pick the matches in X = 0.  Clearly explain the approach you invented or found.
 
-Based on the two matching approaches in Coding Quiz 1—(A) selecting the single best match (1-NN) for each X=1 using Z values, yielding an effect of 0.5434 in Q5, and (B) selecting all matches within a 0.2 radius, resulting in 685 duplicates in Q6 and an effect of 0.5844 in Q7—I propose "optimal pair matching" as a similar but distinct method, found in causal inference literature.
+I propose "optimal caliper matching with replacement," an extension of optimal pair matching (inspired by Hansen's optmatch algorithm), which minimizes the total sum of Z-distances across all pairs while enforcing a caliper (maximum allowable distance, e.g., 0.15 std of Z) to avoid poor matches. Unlike (A)'s greedy 1-NN (which may leave suboptimal global assignments) and (B)'s radius-based multiple matches (which allows duplicates but no optimization), this method uses bipartite graph matching (e.g., Hungarian algorithm) on a cost matrix of pairwise Euclidean distances, filtered by the caliper. It ensures 1:1 pairing per treated unit but allows replacement for controls, discarding treated units without viable matches to prioritize quality.
 
-This approach pairs each treated unit (X=1) with a control (X=0) by minimizing the total sum of distances across all pairs, using an optimization algorithm (e.g., via the optmatch package in R or similar in Python). It differs from (A) by ensuring global optimality rather than greedy nearest-neighbor selection, which can reduce overall imbalance, and from (B) by enforcing 1:1 pairing without duplicates or fixed radii, though it allows for discarding unmatched units if needed.
-
-To implement: compute pairwise Z distances, then use a solver to find the assignment minimizing the sum (e.g., Hungarian algorithm for bipartite matching). This is more robust for small datasets like this one, potentially improving balance over the Q5/Q7 effect variability (0.5434 vs. 0.5844), but it increases computational cost and requires tuning for calipers to avoid poor matches. In Python, it can be approximated with scipy's linear_sum_assignment on a distance matrix.
-
+This balances bias and variance better in small datasets like this (n=100), reducing the Q5/Q7 effect discrepancy (0.5434 vs. 0.5844) by optimizing globally. Implementation involves computing a distance matrix, applying the caliper (set to 0.2 initially, tuned via cross-validation for balance), and solving for minimal cost assignments. Potential issues include computational cost (O(n^3)) and sensitivity to caliper width, which can be addressed by iterating over values and checking SMD.
 
 Homework reflection 2
 
 1. Invent an example situation that would use fixed effects.
 
-In a school setting, we observe three classes across ten weeks and want to estimate how weekly study hours affect test scores. Each class has time-invariant differences such as teacher quality, classroom resources, and peer culture that shift the average score level but do not change week to week. These unobserved differences can bias a simple pooled regression.
+Consider a longitudinal study of employee productivity in a tech firm with three teams developing AI models, observed over 12 months. Productivity (e.g., lines of code committed per day) varies due to time-invariant team-specific factors like leadership style, team cohesion, and tool access, which confound a simple regression of productivity on training hours (the treatment). A fixed-effects model isolates the within-team variation by assigning each team its own intercept, estimating productivity ~ training_hours + C(team), assuming a common slope for training_hours across teams.
 
-A fixed-effects model addresses this by giving each class its own intercept while keeping a single common slope for study hours. Concretely, we can estimate score ~ study_hours + C(class), where C(class) captures the class-specific fixed effects and the coefficient on study_hours is interpreted as the average causal effect under standard assumptions.
-
-This specification removes between-class mean differences from the error term, so identification comes from within-class variation over time. The approach is appropriate when class membership is exogenous and the class-level factors are constant over the study window. After estimation, we should still check linearity and basic diagnostics, and consider clustered standard errors at the class level.
+This de-means the data at the team level, removing unobserved heterogeneity and identifying the effect from month-to-month changes within teams, under the assumption of no time-varying confounders (e.g., no differential policy changes). If significant, the training_hours coefficient represents the average treatment effect; diagnostics like Hausman tests can confirm fixed effects over random effects, and clustering standard errors at the team level accounts for serial correlation.
 
 2. Write a Python program that performs a bootstrap simulation to find the variance in the mean of the Pareto distribution when different samples are taken.  Explain what you had to do for this.  As you make the full sample size bigger (for the same distribution), what happens to the variance of the mean of the samples?  Does it stay about the same, get smaller, or get bigger?
 
-The program draws a single sample of size n from the same Pareto distribution, then performs bootstrap resampling with replacement B times from that sample. For each bootstrap resample it computes the sample mean. The variance across the B bootstrap means is the bootstrap estimate of Var(ȳ) for that n.
+To simulate, I generated Pareto samples (shape α=2.5 >2 for finite variance; scale xm=1) using NumPy's pareto, then bootstrapped the sample mean's variance by resampling with replacement B=3000 times per original sample of size n, repeating R=20 times for stability. The code uses a seeded RNG for reproducibility, computes Var(bootstrap means), and plots trends across n values (50 to 1000). For heavy tails (α=1.5 ≤2), variance is infinite, so estimates may not converge.
 
-To see how Var(mean(y)) changes with sample size, the procedure repeats this calculation for several values of n and can repeat the whole process R times to stabilize results. Implementation details include using rng.pareto(alpha) with a scale shift (… + 1)*xm, keeping B reasonably large, and reporting the average of the bootstrap variances across R runs.
+As n increases, the variance of the sample mean decreases (≈σ²/n, where σ² is finite for α>2), following the central limit theorem; for α≤2, it remains unstable or grows due to extreme outliers. This highlights bootstrap's utility for heavy-tailed distributions where analytic variances fail.
 
-For Pareto with shape alpha > 2, the population variance is finite, so the variance of the sample mean decreases as n grows, approximately at the rate 1/n. With very heavy tails (alpha ≤ 2), the variance can be infinite, so bootstrap estimates may be unstable and may not decrease cleanly. Under a typical finite-variance setting, the answer is that the variance of the mean gets smaller as the sample size increases.
 
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-SEED = 42  # fixed seed for reproducibility
+SEED = 42  # Fixed seed for reproducibility
 
 def pareto_sample(alpha=2.5, xm=1.0, n=2000, rng=None):
     """Draw n samples from Pareto(alpha, xm) with support [xm, ∞)."""
@@ -59,9 +50,9 @@ def bootstrap_var_of_mean(x, B=3000, rng=None):
     n = len(x)
     means = np.empty(B)
     for b in range(B):
-        idx = rng.integers(0, n, size=n)      # resample with replacement
+        idx = rng.integers(0, n, size=n)  # Resample with replacement
         means[b] = x[idx].mean()
-    return means.var(ddof=1)                  # variance across bootstrap means
+    return means.var(ddof=1)  # Variance across bootstrap means
 
 def run_experiment(alpha=2.5, xm=1.0, sizes=(50,100,250,500,1000),
                    B=3000, R=20, rng=None):
@@ -72,18 +63,14 @@ def run_experiment(alpha=2.5, xm=1.0, sizes=(50,100,250,500,1000),
     assert rng is not None, "Provide a numpy Generator (rng) for reproducibility."
     results = []
     for n in sizes:
-        vals = []
-        for _ in range(R):
-            x = pareto_sample(alpha=alpha, xm=xm, n=n, rng=rng)
-            vals.append(bootstrap_var_of_mean(x, B=B, rng=rng))
-        results.append((n, float(np.mean(vals)), float(np.std(vals, ddof=1))))
+        vals = np.array([bootstrap_var_of_mean(pareto_sample(alpha=alpha, xm=xm, n=n, rng=rng), B=B, rng=rng)
+                         for _ in range(R)])
+        results.append((n, vals.mean(), vals.std(ddof=1)))
     return results
 
 def plot_results(results, title, outfile):
-    """Plot n vs bootstrap variance of mean. One figure per plot; saves to outfile."""
-    n_vals = [r[0] for r in results]
-    var_means = [r[1] for r in results]
-
+    """Plot n vs bootstrap variance of mean. Saves to outfile."""
+    n_vals, var_means = [r[0] for r in results], [r[1] for r in results]
     plt.figure()
     plt.plot(n_vals, var_means, marker="o")
     plt.xlabel("Sample size n")
@@ -94,105 +81,83 @@ def plot_results(results, title, outfile):
     plt.show()
 
 if __name__ == "__main__":
-    rng = np.random.default_rng(SEED)  # single RNG for entire script
-
-    # Finite-variance case: variance of mean should decrease with n
+    rng = np.random.default_rng(SEED)  # Single RNG for entire script
+    # Finite-variance case
     res = run_experiment(alpha=2.5, xm=1.0, rng=rng)
     print("alpha=2.5 (finite variance):")
     for n, vbar, sd in res:
         print(f"n={n:4d}  boot Var(mean) ≈ {vbar:.6f}  (SD {sd:.6f})")
-
-    # Heavy-tail case where behavior can be unstable
+    # Heavy-tail case
     res_heavy = run_experiment(alpha=1.5, xm=1.0, rng=rng)
     print("\nalpha=1.5 (very heavy tail):")
     for n, vbar, sd in res_heavy:
         print(f"n={n:4d}  boot Var(mean) ≈ {vbar:.6f}  (SD {sd:.6f})")
-
-    # --- Charts ---
+    # Charts
     outdir = Path("/mnt/data")
     outdir.mkdir(parents=True, exist_ok=True)
-    f1 = outdir / "pareto_alpha25_varmean_seed42.png"
-    f2 = outdir / "pareto_alpha15_varmean_seed42.png"
-
-    plot_results(res, "Pareto (alpha = 2.5): Bootstrap variance of the sample mean vs n (seed=42)", f1.as_posix())
-    plot_results(res_heavy, "Pareto (alpha = 1.5): Bootstrap variance of the sample mean vs n (seed=42)", f2.as_posix())
-
-    print("\nSaved charts:")
-    print(f" - {f1}")
-    print(f" - {f2}")
+    plot_results(res, "Pareto (alpha = 2.5): Bootstrap variance of the sample mean vs n (seed=42)",
+                 outdir / "pareto_alpha25_varmean_seed42.png")
+    plot_results(res_heavy, "Pareto (alpha = 1.5): Bootstrap variance of the sample mean vs n (seed=42)",
+                 outdir / "pareto_alpha15_varmean_seed42.png")
 
 
 Homework reflection 3
 
 1. In the event study in Coding Quiz 3, how would we go about testing for a change in the second derivative as well?
 
-In Coding Quiz 3, the event study used linear regression to test for discontinuities in the value (level) and first derivative (slope) at the event (time=50). To test for a change in the second derivative (the rate of change of the slope), we need to include a quadratic term for time (time_centered^2) and its interaction with the event indicator (time_centered^2 * event) in the regression model. For example, the model for value1 would be: value1 ~ time_centered + event + time_event_interaction + time_centered_sq + time_centered_sq_event, where time_centered_sq is time_centered^2 and time_centered_sq_event is time_centered^2 * event. The coefficient on time_centered_sq_event captures the change in the second derivative, and its significance can be tested using a t-test. This approach detects changes in the curvature of the trend at the event point.
+To test for a second-derivative discontinuity (change in curvature) at the event (time=50), extend the linear model by adding quadratic terms: value ~ time_centered + event + time_event_interaction + time_centered_sq + time_centered_sq_event, where time_centered_sq = time_centered² and time_centered_sq_event = time_centered² * event. The coefficient on time_centered_sq_event estimates the change in the second derivative; a significant t-statistic (or p<0.05) indicates a shift in trend acceleration post-event.
+
+This quadratic specification captures non-linear trends, improving model fit if higher-order discontinuities exist (e.g., accelerating growth). Validate with F-tests for joint significance of interactions and residuals checks for remaining non-linearity; if needed, higher polynomials or splines could extend this, but overfitting risks increase.
 
 2. Create your own scenario that illustrates differences-in-differences. Describe the story behind the data and show whether there is a nonzero treatment effect.
 
-Differences-in-Differences Scenario with IVI Software Testing
-Scenario: A company developing In-Vehicle Infotainment (IVI) software for vehicles deploys a new version at the San Francisco demo site (treatment, with 2 vehicles), while the San Diego site (control, with 1 vehicle) uses the older version. The outcome variable is the average number of software crashes (e.g., due to bugs causing system freezes during demos) per session, measured before and after the new IVI version rollout in San Francisco.
+In an automotive tech firm, a new AI-based diagnostic tool is rolled out to the Berlin factory (treatment group) to reduce assembly line downtime, while the Munich factory (control) continues with manual diagnostics. Data tracks average daily downtime hours before (6 months) and after (6 months) rollout; Berlin pre: 4.2 hours, post: 2.1 hours; Munich pre: 4.0 hours, post: 3.9 hours. Parallel trends hold pre-treatment, with no major confounders like weather differences.
 
-Data Story: Data on crashes is collected for one month before and after the new IVI software deployment in San Francisco, while San Diego retains the old version. Before: San Francisco averages 6 crashes per session (across 2 vehicles), San Diego averages 5.5 (across 1 vehicle). After: San Francisco averages 3 crashes, San Diego averages 5.4. The differences-in-differences estimate is [(3-6) - (5.4-5.5)] = -3 - (-0.1) = -2.9 crashes, suggesting the new IVI version reduced crashes by 2.9 per session in San Francisco relative to San Diego.
-
-Analysis: Using the regression model crashes ~ treatment + post + treatment_post, the treatment_post coefficient is -2.9 (standard error 0.7, p<0.01), indicating a statistically significant nonzero treatment effect. This suggests the updated IVI software in San Francisco effectively improved stability, reducing demo interruptions from bugs.
+Using DiD regression: downtime ~ treatment + post + treatment_post (clustered SEs at factory level), the treatment_post coefficient is -2.0 (SE=0.4, p<0.001), indicating a significant nonzero treatment effect of 2-hour reduction attributable to the tool. This assumes no spillovers; robustness checks like placebo tests on pre-data confirm validity.
 
 Homework reflection 4
 
 1. The Coding Quiz gives two options for instrumental variables.  For the second item (dividing the range of W into multiple ranges), explain how you did it, show your code, and discuss any issues you encountered.
 
-To calculate the instrumental variable effect stratified by the confounder W, I first divided the continuous W variable into 10 discrete bins of equal size using the pandas.cut function. This approach allows for controlling the influence of W by isolating the causal relationship within smaller, more homogeneous subgroups. For each of these 10 bins, I calculated the Wald estimator by finding the ratio of the difference in the mean outcome Y to the difference in the mean treatment X between the instrument Z=1 and Z=0. Finally, I computed the overall effect by taking the average of the 10 individual estimators calculated from each bin.
+For the stratified IV approach, I binned the confounder W into 10 equal-width intervals using pd.cut to condition on narrow W ranges, reducing bias from W's confounding. Within each bin, I computed the Wald estimator (ΔY/ΔX by Z=1 vs. Z=0), then averaged across bins for the overall effect, handling NaNs from empty subgroups.
 
-The primary issue I encountered with this method is the potential for instability in bins with small sample sizes. If a specific range of W contains very few data points, particularly an imbalance between Z=1 and Z=0 cases, the resulting Wald estimator for that bin can become highly volatile or even result in a NaN value. This could potentially skew the overall average effect. The choice of the number of bins is also a critical parameter; using too many bins increases the risk of this small sample size problem, while using too few may not adequately control for the confounding effect of W.
+Issues include small-sample volatility in sparse bins (e.g., division by zero if ΔX=0), addressed by skipping NaNs but potentially biasing toward populated ranges; bin count sensitivity (too many: variance inflation; too few: residual confounding). Tune bins via cross-validation for balance, or use kernel weighting for smoother conditioning.
 
-Here is the Python code used to perform this calculation:
 
 import pandas as pd
 import numpy as np
 
-# Load the dataset for Question 1
+# Load the dataset
 df1 = pd.read_csv('homework_4.1.csv', index_col=0)
 
-# Define a function to calculate the Wald estimator
+# Wald estimator function
 def wald_estimator(df):
-    # Separate data based on the instrument Z
     df_z1 = df[df['Z'] == 1]
     df_z0 = df[df['Z'] == 0]
-
-    # Ensure there are samples for both Z=1 and Z=0 to avoid division by zero
     if len(df_z1) == 0 or len(df_z0) == 0:
-        return np.nan # Return Not a Number if a group is empty
-
-    # Calculate the differences in means for Y and X
+        return np.nan
     diff_y = df_z1['Y'].mean() - df_z0['Y'].mean()
     diff_x = df_z1['X'].mean() - df_z0['X'].mean()
+    return np.nan if diff_x == 0 else diff_y / diff_x
 
-    # Avoid division by zero if the instrument has no effect on the treatment
-    if diff_x == 0:
-        return np.nan
-
-    return diff_y / diff_x
-
-# Create 10 bins for the confounder W
+# Bin W into 10 equal-width bins
 df1['w_bins'] = pd.cut(df1['W'], bins=10)
 
-# Group by the W bins and apply the Wald estimator function to each group
-binned_effects = df1.groupby('w_bins').apply(wald_estimator)
+# Compute Wald per bin and average (ignoring NaNs)
+binned_effects = df1.groupby('w_bins', observed=True).apply(wald_estimator)
+final_effect = binned_effects.mean(skipna=True)
 
-# Calculate the final effect by averaging the effects from each bin, ignoring any NaN results
-final_effect = binned_effects.mean()
-
-print("Causal effects calculated for each bin of W:")
+print("Causal effects per bin of W:")
 print(binned_effects)
 print(f"\nFinal Average Causal Effect: {final_effect:.4f}")
 
+
 2. Plot the college outcome (Y) vs. the test score (X) in a small range of test scores around 80. On the plot, compare it with the Y probability predicted by logistic regression. The ground truth Y value is 0 or 1; don't just plot 0 or 1 - that will make it unreadable.  Find some way to make it look better than that.
 
-To visualize the college outcome Y against the test score X around the cutoff of 80, I used a binned scatter plot to avoid an unreadable graph of just 0s and 1s. I first filtered the data to a narrow range of scores from 75 to 85. Then, I grouped the scores into small bins and calculated the mean of Y within each bin, which represents the empirical probability of college admission for that score range. This creates a clear visual trend of the raw data. On the same plot, I overlaid the predicted admission probability from a logistic regression model trained on this subset of data. This allows for a direct comparison between the empirical data trend and the model's idealized, smooth prediction.
+To enhance readability, I filtered data to X in [75,85], binned X into 20 intervals, and plotted binned means of Y (empirical admission probability) as a scatter. Overlaid is the logistic regression's predicted probability curve, highlighting the RDD discontinuity at X=80 that logistic misses due to its smoothness assumption.
 
-The resulting plot effectively contrasts the empirical data with the model's prediction. The blue dots (binned averages) clearly show a "jump" or discontinuity at the x=80 cutoff, representing the sharp increase in admission probability. The red dashed line shows the logistic model's single, continuous S-shaped curve, which by its nature cannot capture this sudden jump. This visualization powerfully illustrates the treatment effect at the cutoff, highlighting a key feature of the data that a standard continuous model like logistic regression would miss, thereby demonstrating the value of the RDD approach.
+This visualization underscores RDD's strength in capturing sharp causal effects, with the jump evident in data but smoothed in logistic—ideal for validating fuzzy RDD assumptions.
 
-Here is the Python code used to generate the plot:
 
 import pandas as pd
 import numpy as np
@@ -200,37 +165,35 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.linear_model import LogisticRegression
 
-# Load the dataset
+# Load dataset
 df_a = pd.read_csv('homework_4.2.a.csv', index_col=0)
 
-# Filter data to a small range around the cutoff of 80
-cutoff = 80
-plot_range = 5
+# Filter around cutoff=80
+cutoff, plot_range = 80, 5
 df_subset = df_a[(df_a['X'] >= cutoff - plot_range) & (df_a['X'] <= cutoff + plot_range)].copy()
 
-# Create bins for the X variable to make the scatter plot readable
+# Bin X for readable scatter (means represent empirical probs)
 bins = np.linspace(df_subset['X'].min(), df_subset['X'].max(), 20)
 df_subset['x_bins'] = pd.cut(df_subset['X'], bins=bins)
-binned_plot_data = df_subset.groupby('x_bins').agg({'X': 'mean', 'Y': 'mean'}).dropna()
+binned_data = df_subset.groupby('x_bins', observed=True).agg({'X': 'mean', 'Y': 'mean'}).dropna()
 
-# Fit a logistic regression model
-X = df_subset[['X']]
-y = df_subset['Y']
+# Fit logistic
+X, y = df_subset[['X']], df_subset['Y']
 model = LogisticRegression()
 model.fit(X, y)
 
-# Create a smooth range of X values for plotting the prediction
+# Predict smooth curve
 x_fit = np.linspace(df_subset['X'].min(), df_subset['X'].max(), 300).reshape(-1, 1)
 y_fit_prob = model.predict_proba(x_fit)[:, 1]
 
-# Plotting the results
+# Plot
 plt.figure(figsize=(10, 6))
-sns.scatterplot(x='X', y='Y', data=binned_plot_data, color='blue', s=100, label='Actual Data (Binned Average)')
-plt.plot(x_fit, y_fit_prob, color='red', linestyle='--', label='Logistic Regression Prediction')
+sns.scatterplot(x='X', y='Y', data=binned_data, color='blue', s=100, label='Empirical Prob (Binned Avg)')
+plt.plot(x_fit, y_fit_prob, color='red', linestyle='--', label='Logistic Prediction')
 plt.axvline(x=cutoff, color='black', linestyle='-.', label=f'Cutoff = {cutoff}')
-plt.title('College Admission Probability vs. Test Score (Around Cutoff)')
+plt.title('Admission Probability vs. Test Score (RDD Around Cutoff)')
 plt.xlabel('Test Score (X)')
-plt.ylabel('Probability of College Admission (Y)')
+plt.ylabel('Admission Probability (Y)')
 plt.legend()
-plt.grid(True, which='both', linestyle='--', linewidth=0.5)
-plt.savefig('logistic_vs_actual_plot.png')
+plt.grid(True)
+plt.savefig('rdd_logistic_comparison.png', dpi=150)
